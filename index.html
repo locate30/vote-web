@@ -72,11 +72,11 @@
         .card-img {
             height:180px;
             background:#e8edff;
-            display:flex;
-            align-items:center;
-            justify-content:center;
-            color:#888;
-            font-size:14px;
+        }
+        .card-img img{
+            width:100%;
+            height:100%;
+            object-fit:cover;
         }
         .card-body {
             padding:16px;
@@ -126,6 +126,23 @@
             font-size:18px;
             color:#666;
         }
+        /* 图片弹窗样式 */
+        .img-modal {
+            position: fixed;
+            top:0;left:0;right:0;bottom:0;
+            background:rgba(0,0,0,0.8);
+            display:none;
+            z-index:999;
+            align-items:center;
+            justify-content:center;
+        }
+        .img-modal img{
+            max-width:90%;
+            max-height:90%;
+        }
+        .img-modal.active{
+            display:flex;
+        }
     </style>
 </head>
 <body>
@@ -154,24 +171,42 @@
         <div id="resultBox"></div>
     </div>
 </div>
+<!-- 图片弹窗 -->
+<div class="img-modal" id="imgModal">
+    <img id="modalImg" src="" alt="大图">
+</div>
+
 <script>
-    // ===================== 【修改这里！】=====================
+    // ===================== 【修改这里！JSONBin配置】=====================
     const BIN_ID = "6aa56658ac6210605ac4e0e6";
     const MASTER_KEY = "$2a$10$ej2kab79s4devX5YpioSJuTCQ8NEQNvSuG3gjSUFpywvXFFV/qtGa";
-    // =========================================================
+    // ====================================================================
 
+    // 候选人，img填入jsDelivr图片链接
     const girlCandidates = [
-        {id:1,name:"候选人A",desc:"一班"},
-        {id:2,name:"候选人B",desc:"二班"},
-        {id:3,name:"候选人C",desc:"三班"},
+        {id:1,name:"候选人A",desc:"一班",img:"https://cdn.jsdelivr.net/gh/你的用户名/仓库名@main/girl1.jpg"},
+        {id:2,name:"候选人B",desc:"二班",img:"https://cdn.jsdelivr.net/gh/你的用户名/仓库名@main/girl2.jpg"},
+        {id:3,name:"候选人C",desc:"三班",img:"https://cdn.jsdelivr.net/gh/你的用户名/仓库名@main/girl3.jpg"},
     ]
     const boyCandidates = [
-        {id:1,name:"候选人X",desc:"一班"},
-        {id:2,name:"候选人Y",desc:"二班"},
-        {id:3,name:"候选人Z",desc:"三班"},
+        {id:1,name:"候选人X",desc:"一班",img:"https://github.com/locate30/picx-images-hosting/raw/master/psc.6bhtweow6n.webp"},
+        {id:2,name:"候选人Y",desc:"二班",img:"https://cdn.jsdelivr.net/gh/你的用户名/仓库名@main/boy2.jpg"},
+        {id:3,name:"候选人Z",desc:"三班",img:"https://cdn.jsdelivr.net/gh/你的用户名/仓库名@main/boy3.jpg"},
     ]
     let selectedGirl = null;
     let selectedBoy = null;
+
+    // 打开大图弹窗
+    function openBigImg(src){
+        const modal = document.getElementById("imgModal");
+        const modalImg = document.getElementById("modalImg");
+        modalImg.src = src;
+        modal.classList.add("active");
+    }
+    // 关闭弹窗
+    document.getElementById("imgModal").onclick = function(){
+        this.classList.remove("active");
+    }
 
     function hasVoted(){
         return document.cookie.indexOf("vote_done=1") >=0
@@ -212,7 +247,11 @@
             if(type === "girl" && selectedGirl?.id === item.id) card.classList.add("active");
             if(type === "boy" && selectedBoy?.id === item.id) card.classList.add("active");
             card.innerHTML = `
-                <div class="card-img">照片位置</div>
+                <div class="card-img">
+                    <img src="${item.img}" alt="${item.name}" 
+                    onclick="event.stopPropagation();openBigImg('${item.img}')"
+                    onerror="this.style.display='none'">
+                </div>
                 <div class="card-body">
                     <div class="card-name">${item.name}</div>
                     <div class="card-desc">${item.desc}</div>
@@ -239,7 +278,7 @@
             const num = voteData["girl_"+i.id] || 0;
             html += `<div class="result-item"><span>${i.name}</span><span>${num}票</span></div>`
         })
-        html += "<h4 style='margin-top:10px'>🌿 段草</h4>";
+        html += "<h4 style='margin-top:16px'>🌿 段草</h4>";
         boyCandidates.forEach(i=>{
             const num = voteData["boy_"+i.id] || 0;
             html += `<div class="result-item"><span>${i.name}</span><span>${num}票</span></div>`
@@ -247,7 +286,7 @@
         box.innerHTML = html;
     }
 
-    // 提交投票，云端更新票数
+    // 提交投票
     document.getElementById("submitVote").onclick = async function(){
         if(hasVoted()){
             alert("你已经投过票啦！");
@@ -262,7 +301,6 @@
             return;
         }
         try {
-            // 先获取当前票数
             const resGet = await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`,{
                 headers:{"X-Master-Key": MASTER_KEY}
             })
@@ -271,7 +309,6 @@
             voteData["girl_"+selectedGirl.id] = (voteData["girl_"+selectedGirl.id] ||0)+1;
             voteData["boy_"+selectedBoy.id] = (voteData["boy_"+selectedBoy.id] ||0)+1;
 
-            // 更新到云端
             await fetch(`https://api.jsonbin.io/v3/b/${BIN_ID}`,{
                 method:"PUT",
                 headers:{
