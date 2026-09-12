@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>段花段草评选投票</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg,#e0f7ff,#f0eaff);
+            padding: 20px;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            padding: 30px 20px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+        }
+        header h1 {
+            color: #3b49df;
+            margin-bottom: 10px;
+        }
+        header p {
+            color: #666;
+        }
+        .tip {
+            background: #fff8dc;
+            padding:12px;
+            border-radius:10px;
+            margin-bottom:20px;
+            color:#856404;
+            text-align:center;
+        }
+        .title-line {
+            font-size:22px;
+            font-weight:bold;
+            margin:30px 0 16px;
+            color:#222;
+            border-left:5px solid #3b49df;
+            padding-left:10px;
+        }
+        .card-wrap {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap:20px;
+        }
+        .card {
+            background:#fff;
+            border-radius:14px;
+            overflow:hidden;
+            box-shadow:0 3px 10px rgba(0,0,0,0.07);
+            transition:0.25s;
+            cursor: pointer;
+        }
+        .card:hover {
+            transform: translateY(-4px);
+        }
+        .card.active {
+            border: 3px solid #3b49df;
+        }
+        .card-img {
+            height:180px;
+            background:#e8edff;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            color:#888;
+            font-size:14px;
+        }
+        .card-body {
+            padding:16px;
+        }
+        .card-name {
+            font-size:18px;
+            font-weight:bold;
+            margin-bottom:6px;
+        }
+        .card-desc {
+            font-size:13px;
+            color:#666;
+            margin-bottom:12px;
+        }
+        .submit-box{
+            margin:30px 0;
+            text-align:center;
+        }
+        .submit-btn {
+            padding:12px 40px;
+            border:none;
+            border-radius:8px;
+            background:#3b49df;
+            color:white;
+            cursor:pointer;
+            font-size:16px;
+        }
+        .submit-btn:disabled {
+            background:#aaa;
+            cursor:not-allowed;
+        }
+        .result-area {
+            margin-top:30px;
+            background:#fff;
+            padding:20px;
+            border-radius:14px;
+        }
+        .result-item {
+            display:flex;
+            justify-content:space-between;
+            padding:8px 0;
+            border-bottom:1px solid #eee;
+        }
+        .loading{
+            text-align:center;
+            padding:20px;
+            font-size:18px;
+            color:#666;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>段花段草评选活动</h1>
+        <p>为你心中的段花、段草投上宝贵一票！每人限投一次</p>
+    </header>
+    <div class="tip">⚠️ 投票规则：同一设备只能投票一次，请选择1位段花、1位段草后提交投票，票数云端实时保存</div>
+    <div class="loading" id="loading">正在加载云端票数...</div>
+    <div id="votePanel" style="display:none;">
+        <div class="title-line">🌸 段花候选人（选1人）</div>
+        <div class="card-wrap" id="girlList">
+            <!-- JS渲染候选人 -->
+        </div>
+        <div class="title-line">🌿 段草候选人（选1人）</div>
+        <div class="card-wrap" id="boyList">
+            <!-- JS渲染候选人 -->
+        </div>
+        <div class="submit-box">
+            <button class="submit-btn" id="submitVote">提交投票</button>
+        </div>
+    </div>
+    <div class="result-area">
+        <h3>📊 当前票数统计（云端实时）</h3>
+        <div id="resultBox"></div>
+    </div>
+</div>
+<script>
+    // ====================== 果创云配置【请修改这里】======================
+    const YESAPI_HOST = "https://xxx.yesapi.cn"; // 你的果创云域名
+    const YESAPI_APP_KEY = "你的AppKey";
+    const YESAPI_APP_SECRET = "你的AppSecret";
+    // ====================================================================
+
+    // 候选人信息
+    const girlCandidates = [
+        {id:1,name:"候选人A",desc:"一班"},
+        {id:2,name:"候选人B",desc:"二班"},
+        {id:3,name:"候选人C",desc:"三班"},
+    ]
+    const boyCandidates = [
+        {id:1,name:"候选人X",desc:"一班"},
+        {id:2,name:"候选人Y",desc:"二班"},
+        {id:3,name:"候选人Z",desc:"三班"},
+    ]
+    let selectedGirl = null;
+    let selectedBoy = null;
+
+    // Cookie防重复投票
+    function hasVoted(){
+        return document.cookie.indexOf("vote_done=1") >=0
+    }
+    function setVotedCookie(){
+        const d = new Date();
+        d.setTime(d.getTime() + 30*24*60*60*1000);
+        document.cookie = "vote_done=1;expires="+d.toUTCString()+";path=/";
+    }
+
+    // 【果创云接口1】获取全部票数 App.VoteGetAll 开启跨域
+    async function loadCloudVote(){
+        try {
+            const res = await fetch(`${YESAPI_HOST}/?s=App.VoteGetAll&app_key=${YESAPI_APP_KEY}&yesapi_allow_origin=1`);
+            const json = await res.json();
+            let voteData = json.data;
+            if (!voteData) {
+                // 初始化票数
+                voteData = {};
+                girlCandidates.forEach(item=>voteData["girl_"+item.id]=0);
+                boyCandidates.forEach(item=>voteData["boy_"+item.id]=0);
+            }
+            renderVoteResult(voteData);
+            document.getElementById("loading").style.display = "none";
+            document.getElementById("votePanel").style.display = hasVoted() ? "none":"block";
+        } catch(err) {
+            alert("加载票数失败，请刷新页面");
+            console.error(err);
+        }
+    }
+
+    // 渲染候选人卡片
+    function renderList(type){
+        const list = type === "girl" ? girlCandidates : boyCandidates;
+        const wrapId = type === "girl" ? "girlList" : "boyList";
+        const wrap = document.getElementById(wrapId);
+        wrap.innerHTML = "";
+        list.forEach(item=>{
+            const card = document.createElement('div');
+            card.className = "card";
+            if(type === "girl" && selectedGirl?.id === item.id) card.classList.add("active");
+            if(type === "boy" && selectedBoy?.id === item.id) card.classList.add("active");
+            card.innerHTML = `
+                <div class="card-img">照片位置</div>
+                <div class="card-body">
+                    <div class="card-name">${item.name}</div>
+                    <div class="card-desc">${item.desc}</div>
+                </div>
+            `
+            card.onclick = ()=>{
+                if(hasVoted()) return;
+                if(type === "girl"){
+                    selectedGirl = item;
+                }else{
+                    selectedBoy = item;
+                }
+                renderList("girl");
+                renderList("boy");
+            }
+            wrap.appendChild(card);
+        })
+    }
+
+    // 渲染票数
+    function renderVoteResult(voteData){
+        const box = document.getElementById("resultBox");
+        let html = "<h4>🌸 段花</h4>";
+        girlCandidates.forEach(i=>{
+            const num = voteData["girl_"+i.id] || 0;
+            html += `<div class="result-item"><span>${i.name}</span><span>${num}票</span></div>`
+        })
+        html += "<h4 style='margin-top:10px'>🌿 段草</h4>";
+        boyCandidates.forEach(i=>{
+            const num = voteData["boy_"+i.id] || 0;
+            html += `<div class="result-item"><span>${i.name}</span><span>${num}票</span></div>`
+        })
+        box.innerHTML = html;
+    }
+
+    // 【果创云接口2】提交投票 App.VoteDoVote 开启跨域
+    document.getElementById("submitVote").onclick = async function(){
+        if(hasVoted()){
+            alert("你已经投过票啦！");
+            return;
+        }
+        if(!selectedGirl){
+            alert("请选择一位段花候选人");
+            return;
+        }
+        if(!selectedBoy){
+            alert("请选择一位段草候选人");
+            return;
+        }
+        try {
+            const voteGirlKey = "girl_" + selectedGirl.id;
+            const voteBoyKey = "boy_" + selectedBoy.id;
+            const params = new URLSearchParams();
+            params.append("app_key", YESAPI_APP_KEY);
+            params.append("girl_key", voteGirlKey);
+            params.append("boy_key", voteBoyKey);
+            params.append("yesapi_allow_origin", "1");
+
+            const res = await fetch(`${YESAPI_HOST}/?s=App.VoteDoVote`, {
+                method: "POST",
+                body: params
+            });
+            const json = await res.json();
+            if(json.code === 0){
+                setVotedCookie();
+                alert("投票成功！感谢参与本次评选");
+                document.getElementById("votePanel").style.display = "none";
+                // 重新拉取最新票数
+                loadCloudVote();
+            }else{
+                alert("投票失败：" + json.msg);
+            }
+        } catch(err) {
+            alert("网络异常，投票提交失败");
+            console.error(err);
+        }
+    }
+
+    // 初始化
+    renderList("girl");
+    renderList("boy");
+    loadCloudVote();
+</script>
+</body>
+</html>
